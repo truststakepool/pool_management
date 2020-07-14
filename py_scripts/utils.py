@@ -1,10 +1,11 @@
 import json
-import pathlib
+
 import re
 import shutil
 import subprocess
 import os
 from time import sleep
+from pathlib import Path
 
 from py_scripts.constants import TESTNET_MAGIC, NODE_SOCKET_PATH, PROTOCOL_PARAMS_FILEPATH
 
@@ -96,22 +97,32 @@ def delegate_stake_address(stake_addr_skey_file, pool_id, delegation_fee):
 
 
 def get_stake_address_info(stake_addr):
+    set_node_socket_path_env_var()
+    cmd = "cardano-cli shelley query stake-address-info" \
+          " --address " + stake_addr + \
+          " --testnet-magic " + TESTNET_MAGIC
     try:
-        cmd = "cardano-cli shelley query stake-address-info" \
-              " --address " + stake_addr + \
-              " --testnet-magic " + TESTNET_MAGIC
         output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode("utf-8").strip()
         output_json = json.loads(output)
+        if stake_addr in output_json:
+            delegation = output_json[stake_addr]['delegation']
+            reward_account_balance = output_json[stake_addr]['rewardAccountBalance']
+            return delegation, reward_account_balance
+        else:
+            return None, None
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode,
+                                                                                 ' '.join(str(e.output).split())))
 
-        print(f"output_json: {output_json}")
 
-        delegation = output_json[stake_addr]['delegation']
-        reward_account_balance = output_json[stake_addr]['rewardAccountBalance']
-
-        print(f"delegation: {delegation}")
-        print(f"reward_account_balance: {reward_account_balance}")
-
-        return delegation, reward_account_balance
+def get_addr_type(address):
+    try:
+        cmd = "cardano-cli shelley address info" \
+              " --address " + address
+        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode("utf-8").strip()
+        output_json = json.loads(output)
+        addr_type = output_json["type"]
+        return addr_type
     except subprocess.CalledProcessError as e:
         raise RuntimeError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode,
                                                                                  ' '.join(str(e.output).split())))
@@ -150,15 +161,22 @@ def create_stake_addr_delegation_cert(location, stake_addr_vkey_file, node_cold_
                                                                                  ' '.join(str(e.output).split())))
 
 
-def read_address_from_file(location, address_file_name=None):
-    with open(location + "/" + address_file_name, 'r') as file:
+def read_address_from_file(filepath):
+    with open(filepath, 'r') as file:
         address = file.read().replace('\n', '')
     return address
 
 
-def get_file_location(sub_directory, filename):
-    current_directory = pathlib.Path(__file__).parent.absolute()
-    file_location = current_directory + "/" + sub_directory + "/" + filename
+def get_current_test_location():
+    return str(os.getcwd())
+
+
+def get_user_home_location():
+    return str(Path.home())
+
+
+def get_file_location_if_exists(filepath, filename):
+    file_location = filepath + "/" + filename
     if os.path.isfile(file_location):
         return file_location
 
@@ -655,7 +673,7 @@ def gen_pool_registration_cert(pool_pledge, pool_cost, pool_margin, node_vrf_vke
           " --cold-verification-key-file " + node_cold_vkey_file + \
           " --pool-reward-account-verification-key-file " + owner_stake_addr_vkey_file + \
           " --pool-owner-stake-verification-key-file " + owner_stake_addr_vkey_file + \
-          " --testnet-magic " + TESTNET_MAGIC + \
+          " --testnet-magic " + str(TESTNET_MAGIC) + \
           " --out-file " + location + "/" + node_name + suffix_str
     try:
         # pool_metadata is a list of: [pool_metadata_url, pool_metadata_hash]

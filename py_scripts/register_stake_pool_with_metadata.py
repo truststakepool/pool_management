@@ -1,13 +1,12 @@
 from pathlib import Path
 
-import sys
+from py_scripts.utils import gen_pool_metadata_hash, gen_pool_registration_cert, wait_for_new_tip, send_funds, \
+    calculate_tx_ttl, calculate_tx_fee, get_registered_stake_pools_ledger_state, get_file_location_if_exists, \
+    create_stake_addr_delegation_cert, read_address_from_file, get_address_balance, get_key_deposit, get_stake_pool_id, \
+    get_current_test_location, get_user_home_location
 
-from py_scripts.utils import gen_pool_metadata_hash, write_to_file, gen_pool_registration_cert, wait_for_new_tip, send_funds, \
-    calculate_tx_ttl, calculate_tx_fee, get_registered_stake_pools_ledger_state, get_file_location, \
-    create_stake_addr_delegation_cert, read_address_from_file, get_address_balance, get_key_deposit, get_stake_pool_id
-
-pool_metadata_file = get_file_location("pool_metadata", "pool_metadata.json")
-pool_metadata_url = "https://raw.githubusercontent.com/truststakepool/pool_management/master/pool_metadata/pool_metadata.json"
+pool_metadata_url = "https://raw.githubusercontent.com/truststakepool/a/master/a.json"
+pool_metadata_file = get_file_location_if_exists(get_current_test_location(), "pool_metadata.json")
 
 # So pool earn 100 ADA, you have 10 ADA fees, 100 - 10 = 90, then you have 10% margin, 90 * 0.1 = 9 so you earn 19 ADA and the delegators to your pool split the remaining 81
 pool_pledge = 90000
@@ -15,23 +14,21 @@ pool_cost = 1000
 pool_margin = 0.05
 pool_name = "pool"
 
-addr_file = get_file_location("files", "owner.addr")
+files_location = get_user_home_location() + "/shelley_testnet/files"
+
+addr_file = get_file_location_if_exists(files_location, "owner.addr")
 owner_addr = read_address_from_file(addr_file)
-addr_skey_file = get_file_location("files", "owner.skey")
+addr_skey_file = get_file_location_if_exists(files_location, "owner.skey")
 
-stake_addr_file = get_file_location("files", "owner_stake.addr")
+stake_addr_file = get_file_location_if_exists(files_location, "owner_stake.addr")
 owner_stake_addr = read_address_from_file(stake_addr_file)
-stake_addr_vkey_file = get_file_location("files", "owner_stake.vkey")
-stake_addr_skey_file = get_file_location("files", "owner_stake.skey")
-stake_addr_reg_cert_file = get_file_location("files", "owner_stake.reg.cert")
+stake_addr_vkey_file = get_file_location_if_exists(files_location, "owner_stake.vkey")
+stake_addr_skey_file = get_file_location_if_exists(files_location, "owner_stake.skey")
+stake_addr_reg_cert_file = get_file_location_if_exists(files_location, "owner_stake.reg.cert")
 
-pool_vrf_vkey_file = get_file_location("files", "pool_vrf.vkey")
-pool_cold_vkey_file = get_file_location("files", "pool_cold.vkey")
-pool_cold_skey_file = get_file_location("files", "pool_cold.skey")
-
-print("Creating a new folder for the files created by the current test...")
-tmp_directory_for_script_files = "tmp_" + sys.argv[0].split(".")[0]
-Path(tmp_directory_for_script_files).mkdir(parents=True, exist_ok=True)
+pool_vrf_vkey_file = get_file_location_if_exists(files_location, "pool_vrf.vkey")
+pool_cold_vkey_file = get_file_location_if_exists(files_location, "pool_cold.vkey")
+pool_cold_skey_file = get_file_location_if_exists(files_location, "pool_cold.skey")
 
 print(f"====== Step1: create the pool metadata hash for the pool")
 pool_metadata_hash = gen_pool_metadata_hash(pool_metadata_file)
@@ -40,12 +37,12 @@ print(f"pool_metadata_hash: {pool_metadata_hash}")
 print(f"====== Step2: create the stake pool registration certificate, including the pool metadata hash")
 pool_reg_cert_file = gen_pool_registration_cert(pool_pledge, pool_cost, pool_margin, pool_vrf_vkey_file,
                                                 pool_cold_vkey_file, stake_addr_vkey_file,
-                                                tmp_directory_for_script_files, pool_name,
+                                                files_location, pool_name,
                                                 pool_metadata=[pool_metadata_url, pool_metadata_hash])
 print(f"Stake pool registration certificate created - {pool_reg_cert_file}")
 
 print(f"====== Step3: crete the owner-delegation.cert in order to meet the pledge requirements")
-stake_addr_delegation_cert_file = create_stake_addr_delegation_cert(tmp_directory_for_script_files, stake_addr_vkey_file,
+stake_addr_delegation_cert_file = create_stake_addr_delegation_cert(files_location, stake_addr_vkey_file,
                                                                     pool_cold_vkey_file, "owner")
 print(f"Stake pool owner-delegation certificate created - {stake_addr_delegation_cert_file}")
 
